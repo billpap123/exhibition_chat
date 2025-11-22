@@ -1,0 +1,40 @@
+# Flutter/Dart/Pub related
+.dart_tool/
+.packages
+.pub-cache/
+build/
+.pub/
+coverage/
+
+# IntelliJ / Android Studio
+*.iml
+.idea/
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/build/
+
+# iOS (even if you don’t use it, good to ignore)
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/App.framework
+ios/Flutter/Generated.xcconfig
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Web build
+web/.dart_tool/
+web/.firebase/
+
+# Others
+*.log
