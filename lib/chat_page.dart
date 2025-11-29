@@ -10,9 +10,7 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  // Here we define our glyphs.
-  // First one uses your PNG: assets/glyphs/TEXT-10.png
-  // The rest are placeholders with letters only (no image yet).
+  // Your glyph PNGs
   final List<Glyph> allGlyphs = [
     Glyph(id: 'TEXT-10', assetPath: 'assets/glyphs/TEXT-10.png'),
     Glyph(id: 'TEXT-11', assetPath: 'assets/glyphs/TEXT-11.png'),
@@ -22,7 +20,7 @@ class _ChatPageState extends State<ChatPage> {
     Glyph(id: 'TEXT-15', assetPath: 'assets/glyphs/TEXT-15.png'),
     Glyph(id: 'TEXT-16', assetPath: 'assets/glyphs/TEXT-16.png'),
     Glyph(id: 'TEXT-17', assetPath: 'assets/glyphs/TEXT-17.png'),
-    // note: TEXT-18.png does not exist in your ls
+    // TEXT-18 missing
     Glyph(id: 'TEXT-19', assetPath: 'assets/glyphs/TEXT-19.png'),
     Glyph(id: 'TEXT-20', assetPath: 'assets/glyphs/TEXT-20.png'),
     Glyph(id: 'TEXT-21', assetPath: 'assets/glyphs/TEXT-21.png'),
@@ -42,10 +40,14 @@ class _ChatPageState extends State<ChatPage> {
     Glyph(id: 'TEXT-35', assetPath: 'assets/glyphs/TEXT-35.png'),
     Glyph(id: 'TEXT-36', assetPath: 'assets/glyphs/TEXT-36.png'),
   ];
+
   final List<Message> messages = [];
   final List<Glyph> currentGlyphs = [];
 
   final ScrollController _scrollController = ScrollController();
+
+  // special glyph for space (no image, invisible)
+  Glyph get _spaceGlyph => Glyph(id: 'SPACE', assetPath: '');
 
   @override
   void dispose() {
@@ -67,49 +69,107 @@ class _ChatPageState extends State<ChatPage> {
                 padding: const EdgeInsets.all(24),
                 itemCount: messages.length,
                 itemBuilder: (context, index) {
-  final msg = messages[index];
-  return AnimatedOpacity(
-    duration: const Duration(milliseconds: 500),
-    opacity: msg.isVisible ? 1.0 : 0.0,
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black, width: 1),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: msg.glyphs
-              .map(
-                (g) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: g.assetPath.isNotEmpty
-                      ? Image.asset(
-                          g.assetPath,
-                          height: 32,
-                          fit: BoxFit.contain,
-                        )
-                      : Text(
-                          g.id,
-                          style: const TextStyle(
-                            fontSize: 20,
+                  final msg = messages[index];
+                  return AnimatedOpacity(
+                    duration: const Duration(milliseconds: 500),
+                    opacity: msg.isVisible ? 1.0 : 0.0,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.8,
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          // BUBBLE CONTENT – glyphs big & overlapping, wrapping nicely
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final glyphs = msg.glyphs;
+
+                              const double cellWidth = 80.0;
+                              const double cellHeight = 80.0;
+                              const double overlap = 18.0;
+
+                              final double effectiveWidth =
+                                  cellWidth - overlap;
+
+                              int perRow =
+                                  (constraints.maxWidth / effectiveWidth)
+                                      .floor();
+                              if (perRow < 1) perRow = 1;
+
+                              final List<List<Glyph>> rows = [];
+                              for (int i = 0; i < glyphs.length; i += perRow) {
+                                rows.add(
+                                  glyphs.sublist(
+                                    i,
+                                    (i + perRow > glyphs.length)
+                                        ? glyphs.length
+                                        : i + perRow,
+                                  ),
+                                );
+                              }
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: rows.map((row) {
+                                  final rowWidth = row.length == 1
+                                      ? cellWidth
+                                      : cellWidth +
+                                          (row.length - 1) * effectiveWidth;
+
+                                  return SizedBox(
+                                    width: rowWidth,
+                                    height: cellHeight,
+                                    child: Stack(
+                                      clipBehavior: Clip.hardEdge,
+                                      children: List.generate(row.length, (i) {
+                                        final g = row[i];
+                                        final left = i * effectiveWidth;
+
+                                        return Positioned(
+                                          left: left,
+                                          top: 0,
+                                          child: SizedBox(
+                                            width: cellWidth,
+                                            height: cellHeight,
+                                            child: FittedBox(
+                                              fit: BoxFit.contain,
+                                              child: g.id == 'SPACE'
+                                                  ? const SizedBox()
+                                                  : g.assetPath.isNotEmpty
+                                                      ? Image.asset(
+                                                          g.assetPath,
+                                                        )
+                                                      : Text(
+                                                          g.id,
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 80,
+                                                          ),
+                                                        ),
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                    ),
+                                  );
+                                }).toList(),
+                              );
+                            },
                           ),
                         ),
-                ),
-              )
-              .toList(),
-        ),
-      ),
-    ),
-  );
-},
-
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
 
@@ -127,53 +187,65 @@ class _ChatPageState extends State<ChatPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    // Current glyph preview
+                    // Current glyph preview – tight overlap
                     Expanded(
-                      child: ListView(
+                      child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
-                        children: currentGlyphs
-                            .map(
-                              (g) => Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 4),
-                                child: g.assetPath.isNotEmpty
-    ? Image.asset(
-        g.assetPath,
-        height: 30,
-        fit: BoxFit.contain,
-        color: Colors.white,
-        colorBlendMode: BlendMode.srcATop,
-      )
-    : Text(
-        g.id,
-        style: const TextStyle(
-          fontSize: 22,
-          color: Colors.white,
-        ),
-      ),
+                        padding: EdgeInsets.zero,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(currentGlyphs.length, (i) {
+                            final g = currentGlyphs[i];
+                            const double overlap = 18.0;
 
+                            return Transform.translate(
+                              offset: Offset(-i * overlap, 0),
+                              child: SizedBox(
+                                width: 46,
+                                height: 46,
+                                child: FittedBox(
+                                  fit: BoxFit.cover,
+                                  child: g.id == 'SPACE'
+                                      ? const SizedBox() // invisible gap
+                                      : g.assetPath.isNotEmpty
+                                          ? Image.asset(
+                                              g.assetPath,
+                                              color: Colors.white,
+                                              colorBlendMode:
+                                                  BlendMode.srcATop,
+                                            )
+                                          : Text(
+                                              g.id,
+                                              style: const TextStyle(
+                                                fontSize: 32,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                ),
                               ),
-                            )
-                            .toList(),
+                            );
+                          }),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-GestureDetector(
-  onTap: currentGlyphs.isEmpty ? null : _onSendPressed,
-  child: Opacity(
-    // make it “disabled” when no glyphs typed
-    opacity: currentGlyphs.isEmpty ? 0.3 : 1.0,
-    child: SizedBox(
-      width: 70,   // tweak size to match your design
-      height: 50,  // tweak height as needed
-      child: Image.asset(
-        'assets/glyphs/send_button.png', // 👈 your PNG path
-        fit: BoxFit.contain,
-      ),
-    ),
-  ),
-),
 
+                    const SizedBox(width: 12),
+
+                    // SEND BUTTON
+                    GestureDetector(
+                      onTap: currentGlyphs.isEmpty ? null : _onSendPressed,
+                      child: Opacity(
+                        opacity: currentGlyphs.isEmpty ? 0.3 : 1.0,
+                        child: SizedBox(
+                          width: 90,
+                          height: 70,
+                          child: Image.asset(
+                            'assets/glyphs/send_button.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -181,103 +253,159 @@ GestureDetector(
 
             const SizedBox(height: 12),
 
-            // KEYBOARD AREA – custom stepped layout like your design
-            // KEYBOARD AREA – custom stepped layout
-LayoutBuilder(
-  builder: (context, constraints) {
-    final width = constraints.maxWidth;
-    const outerPadding = 24.0;
-    const keyGap = 4.0;
+            // KEYBOARD AREA – custom stepped layout + space/backspace
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                const outerPadding = 24.0;
+                const keyGap = 4.0;
 
-    // διαθέσιμο πλάτος για την 1η σειρά (9 πλήκτρα)
-    final row1AvailableWidth = width - 2 * outerPadding;
+                final row1AvailableWidth = width - 2 * outerPadding;
+                final keySize = (row1AvailableWidth - 8 * keyGap) / 9;
+                final slotWidth = keySize + keyGap;
 
-    // 9 πλήκτρα = 9 key widths + 8 gaps
-    final keySize = (row1AvailableWidth - 8 * keyGap) / 9;
+                final row1 = allGlyphs.sublist(0, 9);
+                final row2 = allGlyphs.sublist(9, 16);
+                final row3 = allGlyphs.sublist(16, 23);
+                final bottomRow = allGlyphs.sublist(23, 26);
 
-    // ένα "slot" = πλήκτρο + gap
-    final slotWidth = keySize + keyGap;
+                Widget buildGlyphKey(Glyph glyph) {
+                  return GestureDetector(
+                    onTap: () {
+                      if (currentGlyphs.length >= 40) return;
+                      setState(() => currentGlyphs.add(glyph));
+                    },
+                    child: SizedBox(
+                      width: keySize,
+                      height: keySize,
+                      child: Center(
+                        child: Image.asset(
+                          glyph.assetPath,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  );
+                }
 
-    // σπάμε τα glyphs σε σειρές
-    final row1 = allGlyphs.sublist(0, 9);        // 9 glyphs
-    final row2 = allGlyphs.sublist(9, 16);       // 7 glyphs
-    final row3 = allGlyphs.sublist(16, 23);      // 7 glyphs
-    final bottomRow = allGlyphs.sublist(23, 26); // 3 glyphs
+                Widget buildRow(List<Glyph> glyphs, double leftIndent) {
+                  return Padding(
+                    padding: EdgeInsets.only(left: leftIndent),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (int i = 0; i < glyphs.length; i++) ...[
+                          buildGlyphKey(glyphs[i]),
+                          if (i != glyphs.length - 1)
+                            const SizedBox(width: keyGap),
+                        ],
+                      ],
+                    ),
+                  );
+                }
 
-    // ⌨️ ένα key ΧΩΡΙΣ extra border (έχεις ήδη το πλαίσιο στο png)
-    Widget buildKey(Glyph glyph) {
-      return GestureDetector(
-        onTap: () {
-          if (currentGlyphs.length >= 40) return;
-          setState(() => currentGlyphs.add(glyph));
-        },
-        child: SizedBox(
-          width: keySize,
-          height: keySize,
-          child: Center(
-            child: Image.asset(
-              glyph.assetPath,
-              fit: BoxFit.contain,
+                // row offsets
+                final row1Left = outerPadding;
+                final row2Left = outerPadding + 1 * slotWidth;
+                final row3Left = outerPadding + 0.5 * slotWidth;
+
+                // special positions for space + delete
+                final spaceLeft = outerPadding + 0.5 * slotWidth;
+                final deleteLeft = outerPadding + 7.5 * slotWidth;
+                final bottomGlyphsLeft = outerPadding + 3.5 * slotWidth;
+
+                // space key widget (uses your PNG)
+Widget buildSpaceKey() {
+  return GestureDetector(
+    onTap: () {
+      if (currentGlyphs.length >= 40) return;
+      setState(() => currentGlyphs.add(_spaceGlyph)); // still adds invisible SPACE glyph
+    },
+    child: SizedBox(
+      width: keySize,
+      height: keySize,
+      child: Image.asset(
+        'assets/glyphs/space_key.png',   // 👈 your space PNG
+        fit: BoxFit.contain,
+      ),
+    ),
+  );
+}
+
+// backspace key widget (uses your PNG)
+Widget buildBackspaceKey() {
+  return GestureDetector(
+    onTap: () {
+      if (currentGlyphs.isEmpty) return;
+      setState(() => currentGlyphs.removeLast());
+    },
+    child: SizedBox(
+      width: keySize,
+      height: keySize,
+      child: Image.asset(
+        'assets/glyphs/delete_key.png',  // 👈 your delete PNG
+        fit: BoxFit.contain,
+      ),
+    ),
+  );
+}
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 12),
+                    buildRow(row1, row1Left),
+                    const SizedBox(height: 6),
+                    buildRow(row2, row2Left),
+                    const SizedBox(height: 6),
+                    buildRow(row3, row3Left),
+                    const SizedBox(height: 18),
+
+                    // bottom row: glyphs + space + backspace positioned by slots
+                    SizedBox(
+                      height: keySize,
+                      width: width,
+                      child: Stack(
+                        children: [
+                          // 3 glyphs centered-ish
+                          Positioned(
+                            left: bottomGlyphsLeft,
+                            top: 0,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (int i = 0; i < bottomRow.length; i++) ...[
+                                  buildGlyphKey(bottomRow[i]),
+                                  if (i != bottomRow.length - 1)
+                                    const SizedBox(width: keyGap),
+                                ],
+                              ],
+                            ),
+                          ),
+
+                          // space key at 0.5 slots in
+                          Positioned(
+                            left: spaceLeft,
+                            top: 0,
+                            child: buildSpaceKey(),
+                          ),
+
+                          // delete key at 7.5 slots in
+                          Positioned(
+                            left: deleteLeft,
+                            top: 0,
+                            child: buildBackspaceKey(),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+                  ],
+                );
+              },
             ),
-          ),
-        ),
-      );
-    }
-
-    // μία σειρά με N πλήκτρα, με custom left indent
-    Widget buildRow(List<Glyph> glyphs, double leftIndent) {
-      return Padding(
-        padding: EdgeInsets.only(left: leftIndent),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (int i = 0; i < glyphs.length; i++) ...[
-              buildKey(glyphs[i]),
-              if (i != glyphs.length - 1)
-                const SizedBox(width: keyGap),
-            ],
-          ],
-        ),
-      );
-    }
-
-    // --- OFFSETS (σε "slots") όπως ζήτησες ---
-
-    // 1η σειρά: from outerPadding
-    final row1Left = outerPadding;
-
-    // 2η σειρά: 1 slot in
-    final row2Left = outerPadding + 1 * slotWidth;
-
-    // 3η σειρά: 1.5 slots in
-    final row3Left = outerPadding + 0.5 * slotWidth;
-
-    // 4η σειρά: 4.5 slots in
-    final bottomLeft = outerPadding + 3.5 * slotWidth;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        buildRow(row1, row1Left),
-        const SizedBox(height: 6),
-        buildRow(row2, row2Left),
-        const SizedBox(height: 6),
-        buildRow(row3, row3Left),
-        const SizedBox(height: 18),
-        buildRow(bottomRow, bottomLeft),
-        const SizedBox(height: 8),
-      ],
-    );
-  },
-),
-
-
-           
-
-
-            
           ],
         ),
       ),
@@ -307,32 +435,28 @@ LayoutBuilder(
     }
 
     // SEND = INSTANT "PRINT"
-    // SEND = INSTANT "PRINT"
-  await printerService.printMessage(msg);
+    await printerService.printMessage(msg);
 
-  setState(() {
-    currentGlyphs.clear();
-  });
-
-  // ⏱ keep the message visible for a few seconds, then fade + remove
-  const visibleDuration = Duration(seconds: 4);
-  const fadeDuration = Duration(milliseconds: 500);
-
-  // after 4 seconds, start fading out
-  Future.delayed(visibleDuration, () {
-    if (!mounted) return;
     setState(() {
-      msg.isVisible = false;
+      currentGlyphs.clear();
     });
 
-    // after fade animation, remove from list
-    Future.delayed(fadeDuration, () {
+    // keep the message visible for a few seconds, then fade + remove
+    const visibleDuration = Duration(seconds: 4);
+    const fadeDuration = Duration(milliseconds: 500);
+
+    Future.delayed(visibleDuration, () {
       if (!mounted) return;
       setState(() {
-        messages.removeWhere((m) => m.id == msg.id);
+        msg.isVisible = false;
+      });
+
+      Future.delayed(fadeDuration, () {
+        if (!mounted) return;
+        setState(() {
+          messages.removeWhere((m) => m.id == msg.id);
+        });
       });
     });
-  });
-}
-
+  }
 }
