@@ -10,6 +10,22 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
+  // Keep spacing identical between black bar preview and bubble
+  static const double kOverlap = 22.0; // bigger = more overlap = tighter
+  static const int kMaxGlyphs = 120; // choose your limit
+
+  // Black bar preview sizing
+  static const double kPreviewSize = 46.0; // size of glyphs in the black bar
+
+  // The horizontal "step" between glyphs (this is the spacing rule)
+  static const double kStep = kPreviewSize - kOverlap; // 24.0
+
+  // Bubble glyph size (big)
+  static const double kBubbleGlyphSize = 80.0;
+
+  // SPACE width multiplier (step-based)
+  static const double kSpaceMultiplier = 1.6;
+
   // Your glyph PNGs
   final List<Glyph> allGlyphs = [
     Glyph(id: 'TEXT-10', assetPath: 'assets/glyphs/TEXT-10.png'),
@@ -45,13 +61,43 @@ class _ChatPageState extends State<ChatPage> {
   final List<Glyph> currentGlyphs = [];
 
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _previewScrollController = ScrollController();
 
   // special glyph for space (no image, invisible)
   Glyph get _spaceGlyph => Glyph(id: 'SPACE', assetPath: '');
 
+  double _previewStepFor(Glyph g) =>
+      g.id == 'SPACE' ? kStep * kSpaceMultiplier : kStep;
+
+  double _bubbleStepFor(Glyph g) {
+    final double scale = kBubbleGlyphSize / kPreviewSize;
+    return _previewStepFor(g) * scale;
+  }
+
+  void _scrollPreviewToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_previewScrollController.hasClients) return;
+      _previewScrollController.jumpTo(
+        _previewScrollController.position.maxScrollExtent,
+      );
+    });
+  }
+
+  /// Total scrollable width for the black-bar preview content.
+  /// width = first glyph full width + sum(steps of all glyphs except last)
+  double _previewContentWidth(List<Glyph> glyphs) {
+    if (glyphs.isEmpty) return 0;
+    double w = kPreviewSize;
+    for (int i = 0; i < glyphs.length - 1; i++) {
+      w += _previewStepFor(glyphs[i]);
+    }
+    return w;
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
+    _previewScrollController.dispose();
     super.dispose();
   }
 
@@ -93,16 +139,16 @@ class _ChatPageState extends State<ChatPage> {
                             builder: (context, constraints) {
                               final glyphs = msg.glyphs;
 
-                              const double cellWidth = 80.0;
-                              const double cellHeight = 80.0;
-                              const double overlap = 18.0;
+                              const double cellWidth = kBubbleGlyphSize;
+                              const double cellHeight = kBubbleGlyphSize;
 
-                              final double effectiveWidth =
-                                  cellWidth - overlap;
+                              // average step to estimate perRow
+                              final double avgStep =
+                                  (_bubbleStepFor(_spaceGlyph) + _bubbleStepFor(Glyph(id: 'X', assetPath: ''))) /
+                                      2;
 
                               int perRow =
-                                  (constraints.maxWidth / effectiveWidth)
-                                      .floor();
+                                  (constraints.maxWidth / avgStep).floor();
                               if (perRow < 1) perRow = 1;
 
                               final List<List<Glyph>> rows = [];
@@ -120,10 +166,11 @@ class _ChatPageState extends State<ChatPage> {
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: rows.map((row) {
-                                  final rowWidth = row.length == 1
-                                      ? cellWidth
-                                      : cellWidth +
-                                          (row.length - 1) * effectiveWidth;
+                                  // row width = first glyph full width + sum(steps of glyphs except last)
+                                  double rowWidth = row.isEmpty ? 0 : cellWidth;
+                                  for (int i = 0; i < row.length - 1; i++) {
+                                    rowWidth += _bubbleStepFor(row[i]);
+                                  }
 
                                   return SizedBox(
                                     width: rowWidth,
@@ -131,8 +178,12 @@ class _ChatPageState extends State<ChatPage> {
                                     child: Stack(
                                       clipBehavior: Clip.hardEdge,
                                       children: List.generate(row.length, (i) {
+                                        double left = 0;
+                                        for (int j = 0; j < i; j++) {
+                                          left += _bubbleStepFor(row[j]);
+                                        }
+
                                         final g = row[i];
-                                        final left = i * effectiveWidth;
 
                                         return Positioned(
                                           left: left,
@@ -145,13 +196,10 @@ class _ChatPageState extends State<ChatPage> {
                                               child: g.id == 'SPACE'
                                                   ? const SizedBox()
                                                   : g.assetPath.isNotEmpty
-                                                      ? Image.asset(
-                                                          g.assetPath,
-                                                        )
+                                                      ? Image.asset(g.assetPath)
                                                       : Text(
                                                           g.id,
-                                                          style:
-                                                              const TextStyle(
+                                                          style: const TextStyle(
                                                             fontSize: 80,
                                                           ),
                                                         ),
@@ -187,44 +235,47 @@ class _ChatPageState extends State<ChatPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    // Current glyph preview – tight overlap
+                    // Current glyph preview – stepped layout + variable SPACE
                     Expanded(
                       child: SingleChildScrollView(
+                        controller: _previewScrollController,
                         scrollDirection: Axis.horizontal,
                         padding: EdgeInsets.zero,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: List.generate(currentGlyphs.length, (i) {
-                            final g = currentGlyphs[i];
-                            const double overlap = 18.0;
-
-                            return Transform.translate(
-                              offset: Offset(-i * overlap, 0),
-                              child: SizedBox(
-                                width: 46,
-                                height: 46,
-                                child: FittedBox(
-                                  fit: BoxFit.cover,
-                                  child: g.id == 'SPACE'
-                                      ? const SizedBox() // invisible gap
-                                      : g.assetPath.isNotEmpty
-                                          ? Image.asset(
-                                              g.assetPath,
+                        child: SizedBox(
+                          width: _previewContentWidth(currentGlyphs),
+                          height: kPreviewSize,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              for (int i = 0; i < currentGlyphs.length; i++)
+                                Positioned(
+                                  left: (() {
+                                    double x = 0;
+                                    for (int j = 0; j < i; j++) {
+                                      x += _previewStepFor(currentGlyphs[j]);
+                                    }
+                                    return x;
+                                  })(),
+                                  top: 0,
+                                  child: SizedBox(
+                                    width: currentGlyphs[i].id == 'SPACE'
+                                        ? kPreviewSize * kSpaceMultiplier
+                                        : kPreviewSize,
+                                    height: kPreviewSize,
+                                    child: currentGlyphs[i].id == 'SPACE'
+                                        ? const SizedBox()
+                                        : FittedBox(
+                                            fit: BoxFit.contain,
+                                            child: Image.asset(
+                                              currentGlyphs[i].assetPath,
                                               color: Colors.white,
-                                              colorBlendMode:
-                                                  BlendMode.srcATop,
-                                            )
-                                          : Text(
-                                              g.id,
-                                              style: const TextStyle(
-                                                fontSize: 32,
-                                                color: Colors.white,
-                                              ),
+                                              colorBlendMode: BlendMode.srcATop,
                                             ),
+                                          ),
+                                  ),
                                 ),
-                              ),
-                            );
-                          }),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -260,8 +311,13 @@ class _ChatPageState extends State<ChatPage> {
                 const outerPadding = 24.0;
                 const keyGap = 4.0;
 
-                final row1AvailableWidth = width - 2 * outerPadding;
-                final keySize = (row1AvailableWidth - 8 * keyGap) / 9;
+                final row1AvailableWidth =
+                    (width - 2 * outerPadding).clamp(0.0, double.infinity);
+
+                final rawKeySize = (row1AvailableWidth - 8 * keyGap) / 9;
+
+                // Prevent negative/too-small sizes (this is what crashes on the tablet)
+                final keySize = rawKeySize.clamp(24.0, 120.0);
                 final slotWidth = keySize + keyGap;
 
                 final row1 = allGlyphs.sublist(0, 9);
@@ -272,8 +328,9 @@ class _ChatPageState extends State<ChatPage> {
                 Widget buildGlyphKey(Glyph glyph) {
                   return GestureDetector(
                     onTap: () {
-                      if (currentGlyphs.length >= 40) return;
+                      if (currentGlyphs.length >= kMaxGlyphs) return;
                       setState(() => currentGlyphs.add(glyph));
+                      _scrollPreviewToEnd();
                     },
                     child: SizedBox(
                       width: keySize,
@@ -315,40 +372,42 @@ class _ChatPageState extends State<ChatPage> {
                 final bottomGlyphsLeft = outerPadding + 3.5 * slotWidth;
 
                 // space key widget (uses your PNG)
-Widget buildSpaceKey() {
-  return GestureDetector(
-    onTap: () {
-      if (currentGlyphs.length >= 40) return;
-      setState(() => currentGlyphs.add(_spaceGlyph)); // still adds invisible SPACE glyph
-    },
-    child: SizedBox(
-      width: keySize,
-      height: keySize,
-      child: Image.asset(
-        'assets/glyphs/space_key.png',   // 👈 your space PNG
-        fit: BoxFit.contain,
-      ),
-    ),
-  );
-}
+                Widget buildSpaceKey() {
+                  return GestureDetector(
+                    onTap: () {
+                      if (currentGlyphs.length >= kMaxGlyphs) return;
+                      setState(() => currentGlyphs.add(_spaceGlyph));
+                      _scrollPreviewToEnd();
+                    },
+                    child: SizedBox(
+                      width: keySize,
+                      height: keySize,
+                      child: Image.asset(
+                        'assets/glyphs/space_key.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  );
+                }
 
-// backspace key widget (uses your PNG)
-Widget buildBackspaceKey() {
-  return GestureDetector(
-    onTap: () {
-      if (currentGlyphs.isEmpty) return;
-      setState(() => currentGlyphs.removeLast());
-    },
-    child: SizedBox(
-      width: keySize,
-      height: keySize,
-      child: Image.asset(
-        'assets/glyphs/delete_key.png',  // 👈 your delete PNG
-        fit: BoxFit.contain,
-      ),
-    ),
-  );
-}
+                // backspace key widget (uses your PNG)
+                Widget buildBackspaceKey() {
+                  return GestureDetector(
+                    onTap: () {
+                      if (currentGlyphs.isEmpty) return;
+                      setState(() => currentGlyphs.removeLast());
+                      _scrollPreviewToEnd();
+                    },
+                    child: SizedBox(
+                      width: keySize,
+                      height: keySize,
+                      child: Image.asset(
+                        'assets/glyphs/delete_key.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  );
+                }
 
                 return Column(
                   mainAxisSize: MainAxisSize.min,
